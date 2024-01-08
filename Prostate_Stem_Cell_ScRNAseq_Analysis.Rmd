@@ -1,0 +1,153 @@
+---
+title: "Prostate_Stem_Cell_ScRNAseq_Analysis"
+output: rmarkdown::github_document
+---
+
+## Objectives
+
+### Single cell RNA-seq gene expression profiling of prostate basal cell subpopulation using data from the journal article "Identification of a Zeb1 expressing basal stem cell subpopulation in the prostate" 
+
+### Wang et al., 2020, Nat Commun 11:706
+
+### Exploration of transcriptional differences and interations among different subpopulations within prostate basal cells
+
+## Data
+
+### Raw data is accessible from GEO with the following accession code: GSE111429
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+```{r}
+pacman::p_load(Seurat, dplyr, Matrix, ggpubr, ComplexHeatmap, circlize, fgsea, msigdbr, data.table, ggplot2,
+               tidyverse, pathview, monocle3, SeuratWrappers, biomaRt)
+
+rm(list=ls())
+```
+
+## Read in data
+
+```{r, warning=FALSE}
+exp_data <- Read10X(data.dir = "./data")
+seu.obj <- CreateSeuratObject(count = exp_data)
+seu.obj <- PercentageFeatureSet(seu.obj, pattern = "^mt-", col.name = "mitopercent")
+before <- VlnPlot(seu.obj, features =c('nFeature_RNA','nCount_RNA','mitopercent'))
+```
+
+## Calculate % mitochondria (dying cells)
+
+```{r}
+# Poor-quality cells with less than 1000 genes detected, less than 5000 UMIs or more than 5% UMI mapped to mitochondria genes were removed. 
+seu.obj <- subset(seu.obj, subset = nFeature_RNA > 1400 & nCount_RNA > 5000 & mitopercent < 5)
+after <- VlnPlot(seu.obj, features =c('nFeature_RNA','nCount_RNA','mitopercent'))
+ggarrange(before,after, ncol = 2, nrow = 1)
+```
+
+## Data Preprocessing using Seurat Object
+
+```{r, results='hide'}
+seu.obj <- NormalizeData(seu.obj, normalization.method='LogNormalize', scale.factor=1e4)
+seu.obj <- FindVariableFeatures(seu.obj,
+                               nfeatures = 1606,
+                               mean.cutoff = c(0.0125,3),
+                               dispersion.cutoff = c(0.5, Inf))
+seu.obj <- ScaleData(seu.obj, vars.to.regress=c('nCount_RNA','mitopercent'))
+seu.obj <- RunPCA(seu.obj, features = seu.obj@assays$RNA@meta.data$var.features, verbose = TRUE, 
+                 ndims.print=1:5, nfeatures.print = 5)
+PCAPlot(seu.obj, dims = c(1, 2))
+```
+
+
+```{r}
+DimHeatmap(seu.obj, dims = 1:12, cells = 500, balanced = TRUE)
+```
+
+
+```{r}
+seu.obj <- FindNeighbors(seu.obj, dims = 1:12)
+seu.obj <- FindClusters(seu.obj, resolution=c(0.2,0.3,0.4,0.5))
+seu.obj <- RunTSNE(seu.obj, dims = 1:12, do.fast=TRUE)
+Idents(object = seu.obj) <- seu.obj$RNA_snn_res.0.2
+DimPlot(seu.obj, reduction = "tsne", label = TRUE, pt.size = 1, label.size = 6)
+PCAPlot(seu.obj)
+```
+
+## Subset non-epithelial cells
+
+```{r}
+FeaturePlot(seu.obj, features =c('Cd74','Cd72') , cols =c('yellow','red'), 
+            reduction ='tsne', pt.size = 0.7,ncol = 3, label = T)
+FeaturePlot(seu.obj, features = c('Eng','S1pr1','Emcn'), cols =c('yellow','red'), 
+            reduction = 'tsne',pt.size = 0.7,ncol=3, label = T)
+```
+
+
+```{r}
+v1 <- VlnPlot(seu.obj, features = c("Epcam","Cdh1","Krt5", "Krt14"), ncol = 4) # Epithelial markers
+v2 <- VlnPlot(seu.obj, features = c("Igfbp4","Fn1","Gng11"), ncol = 3) # Stromal markers
+v3 <- VlnPlot(seu.obj, features = c("Eng","S1pr1","Emcn"), ncol = 3) # Endothelial markers
+v4 <- VlnPlot(seu.obj, features = c("Cd74","Cd72"), ncol = 2) # Immune markers
+ggarrange(v1, v2, v3, v4, ncol = 1)
+```
+
+## Clustering using Seurat
+
+```{r, results='hide', message=FALSE}
+seu.obj <- subset(seu.obj, idents = c("4","8"), invert = TRUE)
+DefaultAssay(seu.obj) <- "RNA"
+seu.obj <- NormalizeData(seu.obj, normalization.method='LogNormalize', scale.factor=1e4)
+seu.obj <- FindVariableFeatures(seu.obj, mean.function = ExpMean, 
+                               dispersion.function= LogVMR,
+                               mean.cutoff = c(0.0125, 3),
+                               dispersion.cutoff = c(0.5, Inf))
+length(seu.obj@assays$RNA@meta.data$var.features)
+#
+seu.obj <- ScaleData(seu.obj, vars.to.regress=c('nCount_RNA','percent.mt'))
+seu.obj <- RunPCA(seu.obj, features = seu.obj@assays$RNA@meta.data$var.features, verbose = TRUE, 
+                 ndims.print=1:5, nfeatures.print = 5)
+seu.obj <- FindNeighbors(seu.obj, dims = 1:12)
+seu.obj <- FindClusters(seu.obj, resolution=c(0.2,0.3,0.4,0.5))
+seu.obj <- RunTSNE(seu.obj, dims = 1:12, do.fast=TRUE)
+
+saveRDS(seu.obj, file = "./results/Prostate.RDS")
+```
+
+## Read in data
+
+```{r}
+seu.obj <- readRDS("./results/Prostate.RDS")
+Idents(object = seu.obj) <- seu.obj$RNA_snn_res.0.5
+DimPlot(seu.obj, label = T, pt.size = 1, label.size = 6)
+
+plot <- VlnPlot(seu.obj, features = c("Krt5","Krt14"), combine = FALSE, fill.by = c("feature","ident")) 
+plot <-  lapply(
+  X = plot,
+  FUN = function(p) p + aes(color= seu.obj$RNA_snn_res.0.5)
+)
+CombinePlots(plots = plot, legend = 'none')
+```
+
+## Heatmap
+
+```{r}
+
+# Epithelial markers: "Epcam","Cdh1","Krt5", "Krt14" 
+# Stromalmarkers: "Igfbp4","Fn1","Gng11"
+# Endothelial markers: "Eng","S1pr1","Emcn"
+# Immune markers: "Cd74","Cd72"
+
+listsA <- c('Cdh1','Epcam','Cldn1','Ocln','Vim','Fn1','S100a4','Zeb1','Zeb2',
+            'Twist1','Twist2','Snai1','Snai2','Prrx1','Prrx2','Foxc2','Cdh2','Acta2')
+
+#cluster 7 showed both epithelial and stromal markers
+
+DoHeatmap(seu.obj, features = listsA, disp.min = -1,
+          slot = 'scale.data', 
+          group.colors = rainbow(9)) +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red",midpoint = 1)
+
+```
+
