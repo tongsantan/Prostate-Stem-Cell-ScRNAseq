@@ -9,9 +9,11 @@ Prostate_Stem_Cell_ScRNAseq_Analysis
 
 ### Exploration of transcriptional differences and interations among different subpopulations within prostate basal cells
 
-## Data
+## Source Data and Acknowledgements
 
 ### Raw data is accessible from GEO with the following accession code: GSE111429
+
+### Modified script from Bioinformagician: Single-cell Trajectory analysis using Monocle3 and Seurat | Step-by-step tutorial
 
 ## Setup
 

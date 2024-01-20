@@ -11,9 +11,11 @@ output: rmarkdown::github_document
 
 ### Exploration of transcriptional differences and interations among different subpopulations within prostate basal cells
 
-## Data
+## Source Data and Acknowledegments
 
 ### Raw data is accessible from GEO with the following accession code: GSE111429
+
+### Modified script from LiquidBrain Bioinformatics: How to analyze 10X Single Cell RNA-seq data with R| Seurat Package Tutorial
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
