@@ -13,7 +13,7 @@ Prostate_Stem_Cell_ScRNAseq_Analysis
 
 ### Raw data is accessible from GEO with the following accession code: GSE111429
 
-### Modified script from Bioinformagician: Single-cell Trajectory analysis using Monocle3 and Seurat | Step-by-step tutorial
+### Modified script from LiquidBrain Bioinformatics: How to analyze 10X Single Cell RNA-seq data with R| Seurat Package Tutorial
 
 ## Setup
 
